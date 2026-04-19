@@ -78,6 +78,7 @@ export async function handleQwenAuth(
       telemetryLogPrompts: undefined,
       telemetryOutfile: undefined,
       allowedMcpServerNames: undefined,
+      mcpConfig: undefined,
       allowedTools: undefined,
       acp: undefined,
       experimentalAcp: undefined,
