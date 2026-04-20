@@ -29,7 +29,7 @@ import {
   createDebugLogger,
   NativeLspService,
   isToolEnabled,
-  MCPServerConfig,
+  type MCPServerConfig,
 } from '@qwen-code/qwen-code-core';
 import { extensionsCommand } from '../commands/extensions.js';
 import { hooksCommand } from '../commands/hooks.js';
@@ -801,8 +801,7 @@ function parseMcpConfig(
     );
     return servers as Record<string, MCPServerConfig>;
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     throw new FatalConfigError(
       `Invalid MCP configuration provided via --mcp-config: ${errorMessage}`,
     );
