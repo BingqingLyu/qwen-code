@@ -149,6 +149,26 @@ export default {
   'Configure authentication information for login': '配置登录认证信息',
   'Copy the last result or code snippet to clipboard':
     '将最后的结果或代码片段复制到剪贴板',
+  'Show working-tree change stats versus HEAD':
+    '显示工作区相对 HEAD 的变更统计',
+  'Could not determine current working directory.': '无法确定当前工作目录。',
+  'Failed to compute git diff stats': '计算 git diff 统计失败',
+  'No diff available. Either this is not a git repository, HEAD is missing, or a merge/rebase/cherry-pick/revert is in progress.':
+    '无可用 diff。可能不是 Git 仓库、HEAD 缺失，或正在执行 merge/rebase/cherry-pick/revert。',
+  'Clean working tree — no changes against HEAD.':
+    '工作区干净 —— 与 HEAD 无差异。',
+  '{{count}} file changed, +{{added}} / -{{removed}}':
+    '{{count}} 个文件变更，+{{added}} / -{{removed}}',
+  '{{count}} files changed, +{{added}} / -{{removed}}':
+    '{{count}} 个文件变更，+{{added}} / -{{removed}}',
+  '{{count}} file changed': '{{count}} 个文件变更',
+  '{{count}} files changed': '{{count}} 个文件变更',
+  '…and {{hidden}} more (showing first {{shown}})':
+    '…还有 {{hidden}} 个（仅显示前 {{shown}} 个）',
+  '(binary)': '（二进制）',
+  '(binary, new)': '（二进制，新增）',
+  '(new)': '（新增）',
+  '(new, partial)': '（新增，部分统计）',
 
   // ============================================================================
   // Commands - Agents
@@ -578,6 +598,7 @@ export default {
   '(user)': '（用户）',
   '[not set]': '［未设置］',
   '[value stored in keychain]': '［值存储在钥匙串中］',
+  'Value:': '值：',
   'Manage extension settings.': '管理扩展设置。',
   'You need to specify a command (set or list).':
     '您需要指定命令（set 或 list）。',
@@ -1037,6 +1058,8 @@ export default {
   'Command:': '命令：',
   'Working Directory:': '工作目录：',
   'Capabilities:': '功能：',
+  'No server selected': '未选择服务器',
+  prompts: '提示',
 
   // MCP Tool List
   'No tools available for this server.': '此服务器没有可用工具。',
@@ -1049,7 +1072,9 @@ export default {
   '{{current}}/{{total}}': '{{current}}/{{total}}',
 
   // MCP Tool Detail
+  required: '必需',
   Type: '类型',
+  Enum: '枚举',
   Parameters: '参数',
   'No tool selected': '未选择工具',
   Annotations: '注解',

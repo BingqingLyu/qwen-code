@@ -21,6 +21,7 @@ import { contextCommand } from '../ui/commands/contextCommand.js';
 import { copyCommand } from '../ui/commands/copyCommand.js';
 import { docsCommand } from '../ui/commands/docsCommand.js';
 import { doctorCommand } from '../ui/commands/doctorCommand.js';
+import { diffCommand } from '../ui/commands/diffCommand.js';
 import { directoryCommand } from '../ui/commands/directoryCommand.js';
 import { editorCommand } from '../ui/commands/editorCommand.js';
 import { exportCommand } from '../ui/commands/exportCommand.js';
@@ -45,6 +46,7 @@ import { recapCommand } from '../ui/commands/recapCommand.js';
 import { renameCommand } from '../ui/commands/renameCommand.js';
 import { restoreCommand } from '../ui/commands/restoreCommand.js';
 import { resumeCommand } from '../ui/commands/resumeCommand.js';
+import { rewindCommand } from '../ui/commands/rewindCommand.js';
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
 import { skillsCommand } from '../ui/commands/skillsCommand.js';
 import { statsCommand } from '../ui/commands/statsCommand.js';
@@ -99,6 +101,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       compressCommand,
       contextCommand,
       copyCommand,
+      diffCommand,
       deleteCommand,
       docsCommand,
       doctorCommand,
@@ -126,6 +129,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       renameCommand,
       restoreCommand(this.config),
       resumeCommand,
+      rewindCommand,
       skillsCommand,
       statsCommand,
       summaryCommand,
