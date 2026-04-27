@@ -45,6 +45,7 @@ import { recapCommand } from '../ui/commands/recapCommand.js';
 import { renameCommand } from '../ui/commands/renameCommand.js';
 import { restoreCommand } from '../ui/commands/restoreCommand.js';
 import { resumeCommand } from '../ui/commands/resumeCommand.js';
+import { rewindCommand } from '../ui/commands/rewindCommand.js';
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
 import { skillsCommand } from '../ui/commands/skillsCommand.js';
 import { statsCommand } from '../ui/commands/statsCommand.js';
@@ -56,6 +57,7 @@ import { vimCommand } from '../ui/commands/vimCommand.js';
 import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { insightCommand } from '../ui/commands/insightCommand.js';
 import { statuslineCommand } from '../ui/commands/statuslineCommand.js';
+import { lspCommand } from '../ui/commands/lspCommand.js';
 
 const builtinDebugLogger = createDebugLogger('BUILTIN_COMMAND_LOADER');
 
@@ -126,6 +128,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       renameCommand,
       restoreCommand(this.config),
       resumeCommand,
+      rewindCommand,
       skillsCommand,
       statsCommand,
       summaryCommand,
@@ -137,6 +140,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       terminalSetupCommand,
       insightCommand,
       statuslineCommand,
+      ...(this.config?.isLspEnabled() ? [lspCommand] : []),
     ];
 
     return allDefinitions
