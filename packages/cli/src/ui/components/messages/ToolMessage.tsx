@@ -12,7 +12,7 @@ import { DiffRenderer } from './DiffRenderer.js';
 import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
 import { AnsiOutputText, ShellStatsBar } from '../AnsiOutput.js';
 import type { ShellStatsBarProps } from '../AnsiOutput.js';
-import { MaxSizedBox } from '../shared/MaxSizedBox.js';
+import { MaxSizedBox, MINIMUM_MAX_HEIGHT } from '../shared/MaxSizedBox.js';
 import { TodoDisplay } from '../TodoDisplay.js';
 import type {
   TodoResultDisplay,
@@ -31,6 +31,7 @@ import { theme } from '../../semantic-colors.js';
 import { useSettings } from '../../contexts/SettingsContext.js';
 import type { LoadedSettings } from '../../../config/settings.js';
 import { useCompactMode } from '../../contexts/CompactModeContext.js';
+import { sliceTextByVisualHeight } from '../../utils/textUtils.js';
 
 import {
   ToolStatusIndicator,
@@ -47,6 +48,18 @@ const DEFAULT_SHELL_OUTPUT_MAX_LINES = 5;
 // outputs that will get truncated further MaxSizedBox anyway.
 const MAXIMUM_RESULT_DISPLAY_CHARACTERS = 1000000;
 export type TextEmphasis = 'high' | 'medium' | 'low';
+
+function sliceTextForMaxHeight(
+  text: string,
+  maxHeight: number | undefined,
+  maxWidth: number,
+): { text: string; hiddenLinesCount: number } {
+  return sliceTextByVisualHeight(text, maxHeight, maxWidth, {
+    minHeight: MINIMUM_MAX_HEIGHT,
+    reservedRows: 1,
+    overflowDirection: 'top',
+  });
+}
 
 type DisplayRendererResult =
   | { type: 'none' }
@@ -234,11 +247,21 @@ const StringResultRenderer: React.FC<{
     );
   }
 
+  const sliced = sliceTextForMaxHeight(
+    displayData,
+    availableHeight,
+    childWidth,
+  );
+
   return (
-    <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
+    <MaxSizedBox
+      maxHeight={availableHeight}
+      maxWidth={childWidth}
+      additionalHiddenLinesCount={sliced.hiddenLinesCount}
+    >
       <Box>
         <Text wrap="wrap" color={theme.text.primary}>
-          {displayData}
+          {sliced.text}
         </Text>
       </Box>
     </MaxSizedBox>
