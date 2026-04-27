@@ -47,7 +47,10 @@ import { AgentViewProvider } from './ui/contexts/AgentViewContext.js';
 import { BackgroundAgentViewProvider } from './ui/contexts/BackgroundAgentViewContext.js';
 import { useKittyKeyboardProtocol } from './ui/hooks/useKittyKeyboardProtocol.js';
 import { themeManager, AUTO_THEME_NAME } from './ui/themes/theme-manager.js';
-import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
+import {
+  detectAndEnableKittyProtocol,
+  disableKittyProtocol,
+} from './ui/utils/kittyProtocolDetector.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
 import {
   cleanupCheckpoints,
@@ -83,6 +86,7 @@ import { DualOutputContext } from './dualOutput/DualOutputContext.js';
 import { RemoteInputWatcher } from './remoteInput/RemoteInputWatcher.js';
 import { RemoteInputContext } from './remoteInput/RemoteInputContext.js';
 import { installTerminalRedrawOptimizer } from './ui/utils/terminalRedrawOptimizer.js';
+import { installSynchronizedOutput } from './ui/utils/synchronizedOutput.js';
 
 const debugLogger = createDebugLogger('STARTUP');
 
@@ -171,6 +175,10 @@ export async function startInteractiveUI(
   const restoreTerminalRedrawOptimizer =
     process.stdout.isTTY && !config.getScreenReader()
       ? installTerminalRedrawOptimizer(process.stdout)
+      : () => {};
+  const restoreSynchronizedOutput =
+    process.stdout.isTTY && !config.getScreenReader()
+      ? installSynchronizedOutput(process.stdout)
       : () => {};
 
   // Create dual output bridge if --json-fd or --json-file is specified.
@@ -292,7 +300,12 @@ export async function startInteractiveUI(
   registerCleanup(async () => {
     remoteInputWatcher?.shutdown();
     await dualOutputBridge?.shutdown();
+    // Explicitly disable the Kitty keyboard protocol before unmounting Ink so
+    // that the disable escape sequence is written while stdout is still fully
+    // operational, preventing garbled terminal output after the app exits.
+    disableKittyProtocol();
     instance.unmount();
+    restoreSynchronizedOutput();
     restoreTerminalRedrawOptimizer();
   });
 }
