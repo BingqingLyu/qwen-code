@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import type { HistoryItem } from '../types.js';
 
 // Type for the updater function passed to updateHistoryItem
@@ -19,6 +19,7 @@ export interface UseHistoryManagerReturn {
     id: number,
     updates: Partial<Omit<HistoryItem, 'id'>> | HistoryItemUpdater,
   ) => void;
+  removeItemsById: (ids: Iterable<number>) => void;
   clearItems: () => void;
   loadHistory: (newHistory: HistoryItem[]) => void;
 }
@@ -95,17 +96,31 @@ export function useHistory(): UseHistoryManagerReturn {
     [],
   );
 
+  const removeItemsById = useCallback((ids: Iterable<number>) => {
+    const idsToRemove = new Set(ids);
+    if (idsToRemove.size === 0) {
+      return;
+    }
+    setHistory((prevHistory) =>
+      prevHistory.filter((item) => !idsToRemove.has(item.id)),
+    );
+  }, []);
+
   // Clears the entire history state and resets the ID counter.
   const clearItems = useCallback(() => {
     setHistory([]);
     messageIdCounterRef.current = 0;
   }, []);
 
-  return {
-    history,
-    addItem,
-    updateItem,
-    clearItems,
-    loadHistory,
-  };
+  return useMemo(
+    () => ({
+      history,
+      addItem,
+      updateItem,
+      removeItemsById,
+      clearItems,
+      loadHistory,
+    }),
+    [history, addItem, updateItem, removeItemsById, clearItems, loadHistory],
+  );
 }
