@@ -11,7 +11,7 @@ import * as path from 'node:path';
 import process from 'node:process';
 
 // External dependencies
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { EnvHttpProxyAgent, setGlobalDispatcher } from 'undici';
 
 // Types
 import type {
@@ -98,7 +98,7 @@ import { shouldDefaultToNodePty } from '../utils/shell-utils.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { type ToolName } from '../utils/tool-utils.js';
 import { getErrorMessage } from '../utils/errors.js';
-import { normalizeProxyUrl } from '../utils/proxyUtils.js';
+import { buildNoProxyList, normalizeProxyUrl } from '../utils/proxyUtils.js';
 
 // Local config modules
 import type { FileFilteringOptions } from './constants.js';
@@ -203,8 +203,6 @@ export interface ChatCompressionSettings {
  * Threshold values of -1 mean "never clear" (disabled).
  */
 export interface ClearContextOnIdleSettings {
-  /** Minutes idle before clearing old thinking blocks. Default 5. Use -1 to disable. */
-  thinkingThresholdMinutes?: number;
   /** Minutes idle before clearing old tool results. Default 60. Use -1 to disable. */
   toolResultsThresholdMinutes?: number;
   /** Number of most-recent tool results to preserve. Default 5. */
@@ -373,7 +371,7 @@ export interface ConfigParameters {
     enableFuzzySearch?: boolean;
   };
   checkpointing?: boolean;
-  proxy?: string;
+  proxy?: string | false;
   cwd: string;
   fileDiscoveryService?: FileDiscoveryService;
   includeDirectories?: string[];
@@ -404,15 +402,6 @@ export interface ConfigParameters {
   loadMemoryFromIncludeDirectories?: boolean;
   importFormat?: 'tree' | 'flat';
   chatRecording?: boolean;
-  // Web search providers
-  webSearch?: {
-    provider: Array<{
-      type: 'tavily' | 'google' | 'dashscope';
-      apiKey?: string;
-      searchEngineId?: string;
-    }>;
-    default: string;
-  };
   chatCompression?: ChatCompressionSettings;
   interactive?: boolean;
   trustedFolder?: boolean;
@@ -623,7 +612,7 @@ export class Config {
   private sessionService: SessionService | undefined = undefined;
   private chatRecordingService: ChatRecordingService | undefined = undefined;
   private readonly checkpointing: boolean;
-  private readonly proxy: string | undefined;
+  private readonly proxy: string | false | undefined;
   private readonly cwd: string;
   private readonly explicitIncludeDirectories: string[];
   private readonly bugCommand: BugCommandSettings | undefined;
@@ -645,14 +634,6 @@ export class Config {
   private readonly chatRecordingEnabled: boolean;
   private readonly loadMemoryFromIncludeDirectories: boolean = false;
   private readonly importFormat: 'tree' | 'flat';
-  private readonly webSearch?: {
-    provider: Array<{
-      type: 'tavily' | 'google' | 'dashscope';
-      apiKey?: string;
-      searchEngineId?: string;
-    }>;
-    default: string;
-  };
   private readonly chatCompression: ChatCompressionSettings | undefined;
   private readonly interactive: boolean;
   private readonly trustedFolder: boolean | undefined;
@@ -783,8 +764,6 @@ export class Config {
     this.bugCommand = params.bugCommand;
     this.maxSessionTurns = params.maxSessionTurns ?? -1;
     this.clearContextOnIdle = {
-      thinkingThresholdMinutes:
-        params.clearContextOnIdle?.thinkingThresholdMinutes ?? 5,
       toolResultsThresholdMinutes:
         params.clearContextOnIdle?.toolResultsThresholdMinutes ?? 60,
       toolResultsNumToKeep:
@@ -818,8 +797,7 @@ export class Config {
     this.allowedHttpHookUrls = params.allowedHttpHookUrls ?? [];
     this.onPersistPermissionRuleCallback = params.onPersistPermissionRule;
 
-    // Web search
-    this.webSearch = params.webSearch;
+    // (web search removed)
     this.useRipgrep = params.useRipgrep ?? true;
     this.useBuiltinRipgrep = params.useBuiltinRipgrep ?? true;
     this.shouldUseNodePtyShell =
@@ -871,10 +849,7 @@ export class Config {
       initializeTelemetry(this);
     }
 
-    const proxyUrl = this.getProxy();
-    if (proxyUrl) {
-      setGlobalDispatcher(new ProxyAgent(proxyUrl));
-    }
+    this.setupProxyConfiguration();
     this.geminiClient = new GeminiClient(this);
     this.chatRecordingService = this.chatRecordingEnabled
       ? new ChatRecordingService(this)
@@ -1610,9 +1585,11 @@ export class Config {
       return;
     }
     try {
-      // Finalize the current session's metadata before cleanup.
+      // Finalize the current session's metadata before cleanup, then drain
+      // the async write queue so no records are lost on exit.
       try {
         this.chatRecordingService?.finalize();
+        await this.chatRecordingService?.flush();
       } catch {
         // Best-effort — don't block shutdown
       }
@@ -2052,7 +2029,59 @@ export class Config {
   }
 
   getProxy(): string | undefined {
+    if (this.proxy === false) {
+      return undefined;
+    }
     return normalizeProxyUrl(this.proxy);
+  }
+
+  /**
+   * Sets up proxy configuration with NO_PROXY support.
+   *
+   * Uses `EnvHttpProxyAgent` which respects `NO_PROXY`, unlike the basic
+   * `ProxyAgent`. When a CLI `--proxy` value is provided it is passed
+   * explicitly via `httpProxy` / `httpsProxy` so that it overrides any
+   * proxy environment variables. When `--proxy=''` was used the proxy
+   * field is `false` and this method returns early so that no proxy
+   * dispatcher is installed even when env vars are present.
+   *
+   * This method never mutates `process.env`.
+   */
+  private setupProxyConfiguration(): void {
+    // Explicit disable: user passed --proxy=''
+    if (this.proxy === false) {
+      return;
+    }
+
+    const configProxy = this.getProxy();
+
+    // Guard: process.env may not be available in some test environments (e.g. jsdom)
+    const env = typeof process !== 'undefined' ? process.env : undefined;
+
+    // Check if any proxy environment variables are set
+    const hasProxyEnvVars = !!(
+      env?.['HTTP_PROXY'] ||
+      env?.['http_proxy'] ||
+      env?.['HTTPS_PROXY'] ||
+      env?.['https_proxy']
+    );
+
+    // Nothing to do when no proxy source exists
+    if (!configProxy && !hasProxyEnvVars) {
+      return;
+    }
+
+    const agentOptions: ConstructorParameters<typeof EnvHttpProxyAgent>[0] = {
+      noProxy: buildNoProxyList(),
+    };
+
+    // When --proxy is provided, pass it explicitly so it overrides env vars
+    if (configProxy) {
+      agentOptions.httpProxy = configProxy;
+      agentOptions.httpsProxy = configProxy;
+    }
+
+    setGlobalDispatcher(new EnvHttpProxyAgent(agentOptions));
   }
 
   getWorkingDir(): string {
@@ -2247,11 +2276,6 @@ export class Config {
 
   isBrowserLaunchSuppressed(): boolean {
     return this.getNoBrowser() || !shouldAttemptBrowserLaunch();
-  }
-
-  // Web search provider configuration
-  getWebSearchConfig() {
-    return this.getBareMode() ? undefined : this.webSearch;
   }
 
   getIdeMode(): boolean {
@@ -2710,13 +2734,6 @@ export class Config {
       const { WebFetchTool } = await import('../tools/web-fetch.js');
       return new WebFetchTool(this);
     });
-    // Conditionally register web search tool if web search provider is configured
-    if (this.getWebSearchConfig()) {
-      await registerLazy(ToolNames.WEB_SEARCH, async () => {
-        const { WebSearchTool } = await import('../tools/web-search/index.js');
-        return new WebSearchTool(this);
-      });
-    }
     if (this.isLspEnabled() && this.getLspClient()) {
       await registerLazy(ToolNames.LSP, async () => {
         const { LspTool } = await import('../tools/lsp.js');
