@@ -8,6 +8,7 @@ import {
   AuthType,
   getErrorMessage,
   type Config,
+  type ModelProvidersConfig,
   type ProviderModelConfig as ModelConfig,
 } from '@qwen-code/qwen-code-core';
 import { writeStdoutLine, writeStderrLine } from '../../utils/stdioHelpers.js';
@@ -39,6 +40,8 @@ interface MergedSettingsWithCodingPlan {
   security?: {
     auth?: {
       selectedType?: string;
+      apiKey?: string;
+      baseUrl?: string;
     };
   };
   codingPlan?: CodingPlanSettings;
@@ -91,10 +94,6 @@ export async function handleQwenAuth(
       openaiLoggingDir: undefined,
       proxy: undefined,
       includeDirectories: undefined,
-      tavilyApiKey: undefined,
-      googleApiKey: undefined,
-      googleSearchEngineId: undefined,
-      webSearchDefault: undefined,
       screenReader: undefined,
       inputFormat: undefined,
       outputFormat: undefined,
@@ -450,54 +449,126 @@ export async function showAuthStatus(): Promise<void> {
         t('\n  ⚠ Run /auth to switch to Coding Plan or another provider.\n'),
       );
     } else if (selectedType === AuthType.USE_OPENAI) {
-      // Check for Coding Plan configuration
       const codingPlanRegion = mergedSettings.codingPlan?.region;
-      const codingPlanVersion = mergedSettings.codingPlan?.version;
       const modelName = mergedSettings.model?.name;
 
-      // Check if API key is set in environment
-      const hasApiKey =
-        !!process.env[CODING_PLAN_ENV_KEY] ||
-        !!mergedSettings.env?.[CODING_PLAN_ENV_KEY];
+      // Resolve the active model's provider config (shared by both paths)
+      const modelProviders = mergedSettings.modelProviders as
+        | ModelProvidersConfig
+        | undefined;
+      const models = modelProviders?.[AuthType.USE_OPENAI];
+      const activeModelConfig = Array.isArray(models)
+        ? (models.find((m) => m.id === modelName) ??
+          (modelName ? undefined : models[0]))
+        : undefined;
 
-      if (hasApiKey) {
-        writeStdoutLine(
-          t('✓ Authentication Method: Alibaba Cloud Coding Plan'),
-        );
+      // Detect Coding Plan: trust active model config when available, fall back to settings
+      const providerCodingPlanRegion = isCodingPlanConfig(
+        activeModelConfig?.baseUrl,
+        activeModelConfig?.envKey,
+      );
+      const detectedCodingPlanRegion = activeModelConfig
+        ? providerCodingPlanRegion
+        : codingPlanRegion;
 
-        if (codingPlanRegion) {
-          const regionDisplay =
-            codingPlanRegion === CodingPlanRegion.CHINA
-              ? t('中国 (China) - 阿里云百炼')
-              : t('Global - Alibaba Cloud');
-          writeStdoutLine(t('  Region: {{region}}', { region: regionDisplay }));
-        }
+      if (detectedCodingPlanRegion) {
+        // --- Coding Plan path ---
+        const codingPlanVersion = mergedSettings.codingPlan?.version;
 
-        if (modelName) {
+        const hasCodingPlanKey =
+          !!process.env[CODING_PLAN_ENV_KEY] ||
+          !!mergedSettings.env?.[CODING_PLAN_ENV_KEY];
+
+        if (hasCodingPlanKey) {
           writeStdoutLine(
-            t('  Current Model: {{model}}', { model: modelName }),
+            t('✓ Authentication Method: Alibaba Cloud Coding Plan'),
+          );
+
+          // Show region from settings or from detected config
+          const displayRegion = codingPlanRegion || detectedCodingPlanRegion;
+          if (displayRegion) {
+            const regionDisplay =
+              displayRegion === CodingPlanRegion.CHINA
+                ? t('中国 (China) - 阿里云百炼')
+                : t('Global - Alibaba Cloud');
+            writeStdoutLine(
+              t('  Region: {{region}}', { region: regionDisplay }),
+            );
+          }
+
+          if (modelName) {
+            writeStdoutLine(
+              t('  Current Model: {{model}}', { model: modelName }),
+            );
+          }
+
+          if (codingPlanVersion) {
+            writeStdoutLine(
+              t('  Config Version: {{version}}', {
+                version: codingPlanVersion.substring(0, 8) + '...',
+              }),
+            );
+          }
+
+          writeStdoutLine(t('  Status: API key configured\n'));
+        } else {
+          writeStdoutLine(
+            t(
+              '⚠️  Authentication Method: Alibaba Cloud Coding Plan (Incomplete)',
+            ),
+          );
+          writeStdoutLine(
+            t('  Issue: API key not found in environment or settings\n'),
+          );
+          writeStdoutLine(
+            t('  Run `qwen auth coding-plan` to re-configure.\n'),
           );
         }
-
-        if (codingPlanVersion) {
-          writeStdoutLine(
-            t('  Config Version: {{version}}', {
-              version: codingPlanVersion.substring(0, 8) + '...',
-            }),
-          );
-        }
-
-        writeStdoutLine(t('  Status: API key configured\n'));
       } else {
-        writeStdoutLine(
-          t(
-            '⚠️  Authentication Method: Alibaba Cloud Coding Plan (Incomplete)',
-          ),
-        );
-        writeStdoutLine(
-          t('  Issue: API key not found in environment or settings\n'),
-        );
-        writeStdoutLine(t('  Run `qwen auth coding-plan` to re-configure.\n'));
+        // --- Generic OpenAI-compatible provider path ---
+        // Mirror hasApiKeyForAuth() semantics: explicit envKey → no fallback
+        let hasApiKey: boolean;
+        if (activeModelConfig?.envKey) {
+          hasApiKey =
+            !!process.env[activeModelConfig.envKey] ||
+            !!mergedSettings.env?.[activeModelConfig.envKey];
+        } else {
+          hasApiKey =
+            !!process.env['OPENAI_API_KEY'] ||
+            !!mergedSettings.env?.['OPENAI_API_KEY'] ||
+            !!mergedSettings.security?.auth?.apiKey;
+        }
+
+        if (hasApiKey) {
+          writeStdoutLine(
+            t('✓ Authentication Method: OpenAI-compatible Provider'),
+          );
+
+          if (modelName) {
+            writeStdoutLine(
+              t('  Current Model: {{model}}', { model: modelName }),
+            );
+          }
+
+          const baseUrl =
+            activeModelConfig?.baseUrl ||
+            mergedSettings.security?.auth?.baseUrl;
+          if (baseUrl) {
+            writeStdoutLine(t('  Base URL: {{baseUrl}}', { baseUrl }));
+          }
+
+          writeStdoutLine(t('  Status: API key configured\n'));
+        } else {
+          writeStdoutLine(
+            t(
+              '⚠️  Authentication Method: OpenAI-compatible Provider (Incomplete)',
+            ),
+          );
+          writeStdoutLine(
+            t('  Issue: API key not found in environment or settings\n'),
+          );
+          writeStdoutLine(t('  Run `qwen auth` to re-configure.\n'));
+        }
       }
     } else {
       writeStdoutLine(
