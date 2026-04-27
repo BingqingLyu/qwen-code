@@ -8,19 +8,19 @@ import type React from 'react';
 import { useCallback } from 'react';
 import { Text } from 'ink';
 import {
-  useBackgroundAgentViewState,
-  useBackgroundAgentViewActions,
-} from '../../contexts/BackgroundAgentViewContext.js';
+  useBackgroundTaskViewState,
+  useBackgroundTaskViewActions,
+} from '../../contexts/BackgroundTaskViewContext.js';
 import { useKeypress, type Key } from '../../hooks/useKeypress.js';
 import { theme } from '../../semantic-colors.js';
-import type { BackgroundAgentEntry } from '@qwen-code/qwen-code-core';
+import type { BackgroundTaskEntry } from '@qwen-code/qwen-code-core';
 
 /**
  * Pill label: counts running entries while any are running; once everything
  * has terminated, switches to a "done" form so the pill still invites
  * reopening the dialog to inspect final state.
  */
-export function getPillLabel(entries: readonly BackgroundAgentEntry[]): string {
+export function getPillLabel(entries: readonly BackgroundTaskEntry[]): string {
   const running = entries.filter((e) => e.status === 'running').length;
   if (running > 0) {
     return running === 1 ? '1 local agent' : `${running} local agents`;
@@ -31,8 +31,8 @@ export function getPillLabel(entries: readonly BackgroundAgentEntry[]): string {
 }
 
 export const BackgroundTasksPill: React.FC = () => {
-  const { entries, pillFocused } = useBackgroundAgentViewState();
-  const { openDialog, setPillFocused } = useBackgroundAgentViewActions();
+  const { entries, pillFocused } = useBackgroundTaskViewState();
+  const { openDialog, setPillFocused } = useBackgroundTaskViewActions();
 
   const onKeypress = useCallback(
     (key: Key) => {

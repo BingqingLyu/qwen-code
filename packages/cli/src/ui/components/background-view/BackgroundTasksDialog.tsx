@@ -15,9 +15,9 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import stringWidth from 'string-width';
 import {
-  useBackgroundAgentViewState,
-  useBackgroundAgentViewActions,
-} from '../../contexts/BackgroundAgentViewContext.js';
+  useBackgroundTaskViewState,
+  useBackgroundTaskViewActions,
+} from '../../contexts/BackgroundTaskViewContext.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
 import { theme } from '../../semantic-colors.js';
@@ -26,7 +26,7 @@ import {
   buildBackgroundEntryLabel,
   ToolDisplayNames,
   ToolNames,
-  type BackgroundAgentEntry,
+  type BackgroundTaskEntry,
 } from '@qwen-code/qwen-code-core';
 
 // Tool-name → display-name lookup (`run_shell_command` → `Shell`).
@@ -46,7 +46,7 @@ function formatActivityLabel(name: string, description: string | undefined) {
 }
 import { formatDuration, formatTokenCount } from '../../utils/formatters.js';
 
-const STATUS_VERBS: Record<BackgroundAgentEntry['status'], string> = {
+const STATUS_VERBS: Record<BackgroundTaskEntry['status'], string> = {
   running: 'Running',
   completed: 'Completed',
   failed: 'Failed',
@@ -60,7 +60,7 @@ interface StatusPresentation {
 }
 
 function terminalStatusPresentation(
-  status: BackgroundAgentEntry['status'],
+  status: BackgroundTaskEntry['status'],
 ): StatusPresentation | null {
   switch (status) {
     case 'completed':
@@ -86,11 +86,11 @@ function terminalStatusPresentation(
   }
 }
 
-function rowLabel(entry: BackgroundAgentEntry): string {
+function rowLabel(entry: BackgroundTaskEntry): string {
   return buildBackgroundEntryLabel(entry, { includePrefix: false });
 }
 
-function elapsedFor(entry: BackgroundAgentEntry): string {
+function elapsedFor(entry: BackgroundTaskEntry): string {
   const elapsedMs = Math.max(
     0,
     (entry.endTime ?? Date.now()) - entry.startTime,
@@ -126,7 +126,7 @@ function truncateToWidth(text: string, maxWidth: number): string {
 // ─── List mode ─────────────────────────────────────────────
 
 const ListBody: React.FC<{
-  entries: readonly BackgroundAgentEntry[];
+  entries: readonly BackgroundTaskEntry[];
   selectedIndex: number;
   maxRows: number;
 }> = ({ entries, selectedIndex, maxRows }) => {
@@ -216,7 +216,7 @@ const ListBody: React.FC<{
 // ─── Detail mode ───────────────────────────────────────────
 
 const DetailBody: React.FC<{
-  entry: BackgroundAgentEntry;
+  entry: BackgroundTaskEntry;
   maxHeight: number;
   maxWidth: number;
 }> = ({ entry, maxHeight, maxWidth }) => {
@@ -354,7 +354,7 @@ export const BackgroundTasksDialog: React.FC<BackgroundTasksDialogProps> = ({
   terminalWidth,
 }) => {
   const { entries, selectedIndex, dialogOpen, dialogMode } =
-    useBackgroundAgentViewState();
+    useBackgroundTaskViewState();
   const {
     moveSelectionUp,
     moveSelectionDown,
@@ -362,7 +362,7 @@ export const BackgroundTasksDialog: React.FC<BackgroundTasksDialogProps> = ({
     enterDetail,
     exitDetail,
     cancelSelected,
-  } = useBackgroundAgentViewActions();
+  } = useBackgroundTaskViewActions();
   const config = useConfig();
 
   // Progress and Prompt are each self-capped at 5 rows inside DetailBody,
@@ -386,7 +386,7 @@ export const BackgroundTasksDialog: React.FC<BackgroundTasksDialogProps> = ({
 
   // Tick up a local counter on each activity callback to force the
   // detail body to re-render while it's open. The main status
-  // subscription in useBackgroundAgentView intentionally ignores
+  // subscription in useBackgroundTaskView intentionally ignores
   // activity updates so the Footer pill and AppContainer don't re-run
   // on every tool call a background agent makes.
   const [, bumpActivity] = useState(0);
@@ -394,7 +394,7 @@ export const BackgroundTasksDialog: React.FC<BackgroundTasksDialogProps> = ({
   useEffect(() => {
     if (!dialogOpen || dialogMode !== 'detail' || !selectedAgentId) return;
     const registry = config.getBackgroundTaskRegistry();
-    const onActivity = (entry: BackgroundAgentEntry) => {
+    const onActivity = (entry: BackgroundTaskEntry) => {
       if (entry.agentId !== selectedAgentId) return;
       bumpActivity((n) => n + 1);
     };
@@ -426,7 +426,7 @@ export const BackgroundTasksDialog: React.FC<BackgroundTasksDialogProps> = ({
   // (return focus to the running roster) rather than a correctness fix.
   const initialDetailStatusRef = useRef<{
     agentId: string;
-    status: BackgroundAgentEntry['status'];
+    status: BackgroundTaskEntry['status'];
   } | null>(null);
   useEffect(() => {
     if (!dialogOpen || dialogMode !== 'detail') {

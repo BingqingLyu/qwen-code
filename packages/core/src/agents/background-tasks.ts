@@ -71,7 +71,7 @@ function escapeXml(text: string): string {
     .replace(/>/g, '&gt;');
 }
 
-export type BackgroundAgentStatus =
+export type BackgroundTaskStatus =
   | 'running'
   | 'completed'
   | 'failed'
@@ -98,11 +98,11 @@ export interface BackgroundActivity {
   at: number;
 }
 
-export interface BackgroundAgentEntry {
+export interface BackgroundTaskEntry {
   agentId: string;
   description: string;
   subagentType?: string;
-  status: BackgroundAgentStatus;
+  status: BackgroundTaskStatus;
   startTime: number;
   endTime?: number;
   result?: string;
@@ -140,7 +140,7 @@ export interface BackgroundAgentEntry {
 
 export interface NotificationMeta {
   agentId: string;
-  status: BackgroundAgentStatus;
+  status: BackgroundTaskStatus;
   stats?: AgentCompletionStats;
   toolUseId?: string;
 }
@@ -151,7 +151,7 @@ export type BackgroundNotificationCallback = (
   meta: NotificationMeta,
 ) => void;
 
-export type BackgroundRegisterCallback = (entry: BackgroundAgentEntry) => void;
+export type BackgroundRegisterCallback = (entry: BackgroundTaskEntry) => void;
 
 /**
  * Fires on entry status transitions — register, complete, fail, cancel.
@@ -160,22 +160,22 @@ export type BackgroundRegisterCallback = (entry: BackgroundAgentEntry) => void;
  * on every tool call a background agent makes.
  */
 export type BackgroundStatusChangeCallback = (
-  entry: BackgroundAgentEntry,
+  entry: BackgroundTaskEntry,
 ) => void;
 
 /** Fires on `appendActivity` — scoped to detail-view consumers. */
 export type BackgroundActivityChangeCallback = (
-  entry: BackgroundAgentEntry,
+  entry: BackgroundTaskEntry,
 ) => void;
 
 export class BackgroundTaskRegistry {
-  private readonly agents = new Map<string, BackgroundAgentEntry>();
+  private readonly agents = new Map<string, BackgroundTaskEntry>();
   private notificationCallback?: BackgroundNotificationCallback;
   private registerCallback?: BackgroundRegisterCallback;
   private statusChangeCallback?: BackgroundStatusChangeCallback;
   private activityChangeCallback?: BackgroundActivityChangeCallback;
 
-  register(entry: BackgroundAgentEntry): void {
+  register(entry: BackgroundTaskEntry): void {
     if (!entry.pendingMessages) entry.pendingMessages = [];
     this.agents.set(entry.agentId, entry);
     debugLogger.info(`Registered background agent: ${entry.agentId}`);
@@ -312,18 +312,18 @@ export class BackgroundTaskRegistry {
     this.emitActivityChange(entry);
   }
 
-  get(agentId: string): BackgroundAgentEntry | undefined {
+  get(agentId: string): BackgroundTaskEntry | undefined {
     return this.agents.get(agentId);
   }
 
   /**
    * Snapshot of every entry regardless of status. Used by the TUI
    * footer/dialog to render rows for still-running AND terminal-state
-   * agents; the headless holdback loop keys off `hasUnfinalizedAgents`
+   * tasks; the headless holdback loop keys off `hasUnfinalizedTasks`
    * instead, so callers that only need the running slice can filter
    * this snapshot at the call site.
    */
-  getAll(): BackgroundAgentEntry[] {
+  getAll(): BackgroundTaskEntry[] {
     return Array.from(this.agents.values());
   }
 
@@ -403,11 +403,11 @@ export class BackgroundTaskRegistry {
     debugLogger.info('Aborted all background agents');
   }
 
-  private buildDisplayLabel(entry: BackgroundAgentEntry): string {
+  private buildDisplayLabel(entry: BackgroundTaskEntry): string {
     return buildBackgroundEntryLabel(entry);
   }
 
-  private emitNotification(entry: BackgroundAgentEntry): void {
+  private emitNotification(entry: BackgroundTaskEntry): void {
     // Mark notified *before* invoking the callback so that a re-entrant
     // terminal call inside the callback chain (cancel → complete race)
     // sees the flag and short-circuits, rather than firing twice.
@@ -473,7 +473,7 @@ export class BackgroundTaskRegistry {
     }
   }
 
-  private emitStatusChange(entry: BackgroundAgentEntry): void {
+  private emitStatusChange(entry: BackgroundTaskEntry): void {
     if (!this.statusChangeCallback) return;
     try {
       this.statusChangeCallback(entry);
@@ -482,7 +482,7 @@ export class BackgroundTaskRegistry {
     }
   }
 
-  private emitActivityChange(entry: BackgroundAgentEntry): void {
+  private emitActivityChange(entry: BackgroundTaskEntry): void {
     if (!this.activityChangeCallback) return;
     try {
       this.activityChangeCallback(entry);

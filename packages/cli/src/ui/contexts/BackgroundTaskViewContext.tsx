@@ -5,9 +5,9 @@
  */
 
 /**
- * BackgroundAgentViewContext — React state for the Background tasks
+ * BackgroundTaskViewContext — React state for the Background tasks
  * dialog. Subscription plumbing (registry callbacks → entries) lives in
- * `useBackgroundAgentView`, invoked once here so it owns the single-slot
+ * `useBackgroundTaskView`, invoked once here so it owns the single-slot
  * `setStatusChangeCallback` for the TUI's lifetime.
  */
 
@@ -20,18 +20,18 @@ import {
   useState,
 } from 'react';
 import {
-  type BackgroundAgentEntry,
+  type BackgroundTaskEntry,
   type Config,
 } from '@qwen-code/qwen-code-core';
-import { useBackgroundAgentView } from '../hooks/useBackgroundAgentView.js';
+import { useBackgroundTaskView } from '../hooks/useBackgroundTaskView.js';
 
 // ─── Types ──────────────────────────────────────────────────
 
 export type BackgroundDialogMode = 'closed' | 'list' | 'detail';
 
-export interface BackgroundAgentViewState {
+export interface BackgroundTaskViewState {
   /** Live snapshot of every background agent entry, ordered by startTime. */
-  entries: readonly BackgroundAgentEntry[];
+  entries: readonly BackgroundTaskEntry[];
   /** Index into `entries` for the currently focused row (0-based). */
   selectedIndex: number;
   /** `'closed'` when the overlay isn't mounted; otherwise the active mode. */
@@ -45,7 +45,7 @@ export interface BackgroundAgentViewState {
   pillFocused: boolean;
 }
 
-export interface BackgroundAgentViewActions {
+export interface BackgroundTaskViewActions {
   moveSelectionUp(): boolean;
   moveSelectionDown(): boolean;
   openDialog(): void;
@@ -59,14 +59,14 @@ export interface BackgroundAgentViewActions {
 
 // ─── Context ────────────────────────────────────────────────
 
-export const BackgroundAgentViewStateContext =
-  createContext<BackgroundAgentViewState | null>(null);
-export const BackgroundAgentViewActionsContext =
-  createContext<BackgroundAgentViewActions | null>(null);
+export const BackgroundTaskViewStateContext =
+  createContext<BackgroundTaskViewState | null>(null);
+export const BackgroundTaskViewActionsContext =
+  createContext<BackgroundTaskViewActions | null>(null);
 
 // ─── Defaults (used when no provider is mounted) ────────────
 
-const DEFAULT_STATE: BackgroundAgentViewState = {
+const DEFAULT_STATE: BackgroundTaskViewState = {
   entries: [],
   selectedIndex: 0,
   dialogMode: 'closed',
@@ -77,7 +77,7 @@ const DEFAULT_STATE: BackgroundAgentViewState = {
 const noop = () => {};
 const noopBool = () => false;
 
-const DEFAULT_ACTIONS: BackgroundAgentViewActions = {
+const DEFAULT_ACTIONS: BackgroundTaskViewActions = {
   moveSelectionUp: noopBool,
   moveSelectionDown: noopBool,
   openDialog: noop,
@@ -90,26 +90,26 @@ const DEFAULT_ACTIONS: BackgroundAgentViewActions = {
 
 // ─── Hooks ──────────────────────────────────────────────────
 
-export function useBackgroundAgentViewState(): BackgroundAgentViewState {
-  return useContext(BackgroundAgentViewStateContext) ?? DEFAULT_STATE;
+export function useBackgroundTaskViewState(): BackgroundTaskViewState {
+  return useContext(BackgroundTaskViewStateContext) ?? DEFAULT_STATE;
 }
 
-export function useBackgroundAgentViewActions(): BackgroundAgentViewActions {
-  return useContext(BackgroundAgentViewActionsContext) ?? DEFAULT_ACTIONS;
+export function useBackgroundTaskViewActions(): BackgroundTaskViewActions {
+  return useContext(BackgroundTaskViewActionsContext) ?? DEFAULT_ACTIONS;
 }
 
 // ─── Provider ───────────────────────────────────────────────
 
-interface BackgroundAgentViewProviderProps {
+interface BackgroundTaskViewProviderProps {
   config?: Config;
   children: React.ReactNode;
 }
 
-export function BackgroundAgentViewProvider({
+export function BackgroundTaskViewProvider({
   config,
   children,
-}: BackgroundAgentViewProviderProps) {
-  const { entries } = useBackgroundAgentView(config ?? null);
+}: BackgroundTaskViewProviderProps) {
+  const { entries } = useBackgroundTaskView(config ?? null);
 
   const [rawSelectedIndex, setRawSelectedIndex] = useState(0);
   const [dialogMode, setDialogMode] = useState<BackgroundDialogMode>('closed');
@@ -170,7 +170,7 @@ export function BackgroundAgentViewProvider({
     config.getBackgroundTaskRegistry().cancel(target.agentId);
   }, [config, entries, selectedIndex]);
 
-  const state: BackgroundAgentViewState = useMemo(
+  const state: BackgroundTaskViewState = useMemo(
     () => ({
       entries,
       selectedIndex,
@@ -181,7 +181,7 @@ export function BackgroundAgentViewProvider({
     [entries, selectedIndex, dialogMode, dialogOpen, pillFocused],
   );
 
-  const actions: BackgroundAgentViewActions = useMemo(
+  const actions: BackgroundTaskViewActions = useMemo(
     () => ({
       moveSelectionUp,
       moveSelectionDown,
@@ -205,10 +205,10 @@ export function BackgroundAgentViewProvider({
   );
 
   return (
-    <BackgroundAgentViewStateContext.Provider value={state}>
-      <BackgroundAgentViewActionsContext.Provider value={actions}>
+    <BackgroundTaskViewStateContext.Provider value={state}>
+      <BackgroundTaskViewActionsContext.Provider value={actions}>
         {children}
-      </BackgroundAgentViewActionsContext.Provider>
-    </BackgroundAgentViewStateContext.Provider>
+      </BackgroundTaskViewActionsContext.Provider>
+    </BackgroundTaskViewStateContext.Provider>
   );
 }

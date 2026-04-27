@@ -46,7 +46,7 @@ import { SessionPicker } from './SessionPicker.js';
 import { RewindSelector } from './RewindSelector.js';
 import { MemoryDialog } from './MemoryDialog.js';
 import { BackgroundTasksDialog } from './background-view/BackgroundTasksDialog.js';
-import { useBackgroundAgentViewState } from '../contexts/BackgroundAgentViewContext.js';
+import { useBackgroundTaskViewState } from '../contexts/BackgroundTaskViewContext.js';
 import { t } from '../../i18n/index.js';
 
 interface DialogManagerProps {
@@ -64,7 +64,7 @@ export const DialogManager = ({
 
   const uiState = useUIState();
   const uiActions = useUIActions();
-  const { dialogOpen: bgTasksDialogOpen } = useBackgroundAgentViewState();
+  const { dialogOpen: bgTasksDialogOpen } = useBackgroundTaskViewState();
   const { constrainHeight, terminalHeight, staticExtraHeight, mainAreaWidth } =
     uiState;
 

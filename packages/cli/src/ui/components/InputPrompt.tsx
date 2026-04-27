@@ -48,9 +48,9 @@ import {
   useAgentViewActions,
 } from '../contexts/AgentViewContext.js';
 import {
-  useBackgroundAgentViewState,
-  useBackgroundAgentViewActions,
-} from '../contexts/BackgroundAgentViewContext.js';
+  useBackgroundTaskViewState,
+  useBackgroundTaskViewActions,
+} from '../contexts/BackgroundTaskViewContext.js';
 import { FEEDBACK_DIALOG_KEYS } from '../FeedbackDialog.js';
 import { BaseTextInput } from './BaseTextInput.js';
 import type { RenderLineOptions } from './BaseTextInput.js';
@@ -132,8 +132,8 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     entries: bgEntries,
     dialogOpen: bgDialogOpen,
     pillFocused: bgPillFocused,
-  } = useBackgroundAgentViewState();
-  const { setPillFocused: setBgPillFocused } = useBackgroundAgentViewActions();
+  } = useBackgroundTaskViewState();
+  const { setPillFocused: setBgPillFocused } = useBackgroundTaskViewActions();
   const hasAgents = agents.size > 0;
   // Includes terminal entries — the pill stays open so users can reopen
   // the dialog to inspect final state after the last agent finishes.

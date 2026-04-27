@@ -27,9 +27,9 @@ import {
   type RegisteredAgent,
 } from '../../contexts/AgentViewContext.js';
 import {
-  useBackgroundAgentViewState,
-  useBackgroundAgentViewActions,
-} from '../../contexts/BackgroundAgentViewContext.js';
+  useBackgroundTaskViewState,
+  useBackgroundTaskViewActions,
+} from '../../contexts/BackgroundTaskViewContext.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { useUIState } from '../../contexts/UIStateContext.js';
 import { theme } from '../../semantic-colors.js';
@@ -69,8 +69,8 @@ export const AgentTabBar: React.FC = () => {
     switchToMain,
     setAgentTabBarFocused,
   } = useAgentViewActions();
-  const { entries: bgEntries } = useBackgroundAgentViewState();
-  const { setPillFocused: setBgPillFocused } = useBackgroundAgentViewActions();
+  const { entries: bgEntries } = useBackgroundTaskViewState();
+  const { setPillFocused: setBgPillFocused } = useBackgroundTaskViewActions();
   const { embeddedShellFocused } = useUIState();
   const hasBgAgents = bgEntries.length > 0;
 

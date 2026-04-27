@@ -5,9 +5,9 @@
  */
 
 /**
- * useBackgroundAgentView — subscribes to the background task registry's
+ * useBackgroundTaskView — subscribes to the background task registry's
  * status-change callback and maintains a reactive snapshot of every
- * `BackgroundAgentEntry`, including terminal ones. Surfaces that only
+ * `BackgroundTaskEntry`, including terminal ones. Surfaces that only
  * care about live work (the footer pill, the composer's Down-arrow
  * route) filter for `running` themselves.
  *
@@ -20,18 +20,18 @@
 
 import { useState, useEffect } from 'react';
 import {
-  type BackgroundAgentEntry,
+  type BackgroundTaskEntry,
   type Config,
 } from '@qwen-code/qwen-code-core';
 
-export interface UseBackgroundAgentViewResult {
-  entries: readonly BackgroundAgentEntry[];
+export interface UseBackgroundTaskViewResult {
+  entries: readonly BackgroundTaskEntry[];
 }
 
-export function useBackgroundAgentView(
+export function useBackgroundTaskView(
   config: Config | null,
-): UseBackgroundAgentViewResult {
-  const [entries, setEntries] = useState<BackgroundAgentEntry[]>([]);
+): UseBackgroundTaskViewResult {
+  const [entries, setEntries] = useState<BackgroundTaskEntry[]>([]);
 
   useEffect(() => {
     if (!config) return;
