@@ -115,14 +115,15 @@ export function BackgroundAgentViewProvider({
   const [dialogMode, setDialogMode] = useState<BackgroundDialogMode>('closed');
   const [pillFocused, setPillFocused] = useState(false);
   const dialogOpen = dialogMode !== 'closed';
-  const hasRunning = entries.some((e) => e.status === 'running');
+  const hasEntries = entries.length > 0;
 
-  // Drop stale pill focus as soon as the pill loses its reason to exist —
-  // without this, InputPrompt's input-blocking branch would stay on after
-  // the last running agent finishes.
+  // Drop stale pill focus once the pill itself unmounts — i.e., when the
+  // registry is empty. The pill stays rendered while terminal entries
+  // exist (so the user can reopen the dialog post-termination), so we
+  // intentionally do *not* drop focus on the running → terminal flip.
   useEffect(() => {
-    if (pillFocused && !hasRunning) setPillFocused(false);
-  }, [pillFocused, hasRunning]);
+    if (pillFocused && !hasEntries) setPillFocused(false);
+  }, [pillFocused, hasEntries]);
 
   // rawSelectedIndex can fall out of range when entries shrink; clamp on read.
   const selectedIndex =

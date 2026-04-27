@@ -15,16 +15,24 @@ import { useKeypress, type Key } from '../../hooks/useKeypress.js';
 import { theme } from '../../semantic-colors.js';
 import type { BackgroundAgentEntry } from '@qwen-code/qwen-code-core';
 
-/** Single source of truth for pluralising the pill label. */
-export function getPillLabel(running: readonly BackgroundAgentEntry[]): string {
-  const n = running.length;
-  return n === 1 ? '1 local agent' : `${n} local agents`;
+/**
+ * Pill label: counts running entries while any are running; once everything
+ * has terminated, switches to a "done" form so the pill still invites
+ * reopening the dialog to inspect final state.
+ */
+export function getPillLabel(entries: readonly BackgroundAgentEntry[]): string {
+  const running = entries.filter((e) => e.status === 'running').length;
+  if (running > 0) {
+    return running === 1 ? '1 local agent' : `${running} local agents`;
+  }
+  return entries.length === 1
+    ? '1 local agent done'
+    : `${entries.length} local agents done`;
 }
 
 export const BackgroundTasksPill: React.FC = () => {
   const { entries, pillFocused } = useBackgroundAgentViewState();
   const { openDialog, setPillFocused } = useBackgroundAgentViewActions();
-  const running = entries.filter((e) => e.status === 'running');
 
   const onKeypress = useCallback(
     (key: Key) => {
@@ -46,9 +54,9 @@ export const BackgroundTasksPill: React.FC = () => {
 
   useKeypress(onKeypress, { isActive: pillFocused });
 
-  if (running.length === 0) return null;
+  if (entries.length === 0) return null;
 
-  const label = getPillLabel(running);
+  const label = getPillLabel(entries);
 
   return (
     <>

@@ -135,7 +135,9 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   } = useBackgroundAgentViewState();
   const { setPillFocused: setBgPillFocused } = useBackgroundAgentViewActions();
   const hasAgents = agents.size > 0;
-  const hasRunningBgAgents = bgEntries.some((e) => e.status === 'running');
+  // Includes terminal entries — the pill stays open so users can reopen
+  // the dialog to inspect final state after the last agent finishes.
+  const hasBgAgents = bgEntries.length > 0;
   const [justNavigatedHistory, setJustNavigatedHistory] = useState(false);
   const [escPressCount, setEscPressCount] = useState(0);
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
@@ -947,7 +949,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
             setAgentTabBarFocused(true);
             return true;
           }
-          if (hasRunningBgAgents) {
+          if (hasBgAgents) {
             setBgPillFocused(true);
             return true;
           }
@@ -1117,7 +1119,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       bgDialogOpen,
       bgPillFocused,
       hasAgents,
-      hasRunningBgAgents,
+      hasBgAgents,
       setAgentTabBarFocused,
       setBgPillFocused,
       followup,

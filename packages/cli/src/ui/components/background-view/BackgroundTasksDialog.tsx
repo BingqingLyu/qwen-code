@@ -419,9 +419,11 @@ export const BackgroundTasksDialog: React.FC<BackgroundTasksDialogProps> = ({
   }, [dialogOpen, dialogMode, selectedAgentId, selectedStatus]);
 
   // Auto-fallback to the list view when the selected agent reaches a
-  // terminal state while the user is watching the detail view. We only
-  // exit on the running → terminal *transition* — if the user deliberately
-  // opened an already-completed entry, they stay on it.
+  // terminal state while the user is watching it live. We only exit on
+  // the running → terminal *transition* — if the user deliberately
+  // opened an already-completed entry, they stay on it. The detail
+  // view itself renders terminal state fine, so this is a UX choice
+  // (return focus to the running roster) rather than a correctness fix.
   const initialDetailStatusRef = useRef<{
     agentId: string;
     status: BackgroundAgentEntry['status'];
@@ -431,11 +433,10 @@ export const BackgroundTasksDialog: React.FC<BackgroundTasksDialogProps> = ({
       initialDetailStatusRef.current = null;
       return;
     }
-    // The viewed entry disappeared out from under us — most commonly because
-    // the user pressed `x` and the live-entries filter dropped it once the
-    // registry flipped its status to terminal. Without this fallback the
-    // dialog would sit in detail mode with a stranded "No entry to show"
-    // screen.
+    // Defensive fallback: if the viewed entry has somehow gone missing,
+    // drop back to the list so we don't sit on a "No entry to show" screen.
+    // Hitting this path now is unlikely — terminal entries stay in the
+    // registry — but the entry could disappear if the registry is reset.
     if (!selectedAgentId) {
       initialDetailStatusRef.current = null;
       exitDetail();
