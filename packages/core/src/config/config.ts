@@ -61,6 +61,7 @@ import { PermissionManager } from '../permissions/permission-manager.js';
 import { SubagentManager } from '../subagents/subagent-manager.js';
 import type { SubagentConfig } from '../subagents/types.js';
 import { BackgroundTaskRegistry } from '../agents/background-tasks.js';
+import { BackgroundShellRegistry } from '../services/backgroundShellRegistry.js';
 import {
   DEFAULT_OTLP_ENDPOINT,
   DEFAULT_TELEMETRY_TARGET,
@@ -203,8 +204,6 @@ export interface ChatCompressionSettings {
  * Threshold values of -1 mean "never clear" (disabled).
  */
 export interface ClearContextOnIdleSettings {
-  /** Minutes idle before clearing old thinking blocks. Default 5. Use -1 to disable. */
-  thinkingThresholdMinutes?: number;
   /** Minutes idle before clearing old tool results. Default 60. Use -1 to disable. */
   toolResultsThresholdMinutes?: number;
   /** Number of most-recent tool results to preserve. Default 5. */
@@ -404,15 +403,6 @@ export interface ConfigParameters {
   loadMemoryFromIncludeDirectories?: boolean;
   importFormat?: 'tree' | 'flat';
   chatRecording?: boolean;
-  // Web search providers
-  webSearch?: {
-    provider: Array<{
-      type: 'tavily' | 'google' | 'dashscope';
-      apiKey?: string;
-      searchEngineId?: string;
-    }>;
-    default: string;
-  };
   chatCompression?: ChatCompressionSettings;
   interactive?: boolean;
   trustedFolder?: boolean;
@@ -555,6 +545,7 @@ export class Config {
   private promptRegistry!: PromptRegistry;
   private subagentManager!: SubagentManager;
   private readonly backgroundTaskRegistry = new BackgroundTaskRegistry();
+  private readonly backgroundShellRegistry = new BackgroundShellRegistry();
   private extensionManager!: ExtensionManager;
   private skillManager: SkillManager | null = null;
   private permissionManager: PermissionManager | null = null;
@@ -645,14 +636,6 @@ export class Config {
   private readonly chatRecordingEnabled: boolean;
   private readonly loadMemoryFromIncludeDirectories: boolean = false;
   private readonly importFormat: 'tree' | 'flat';
-  private readonly webSearch?: {
-    provider: Array<{
-      type: 'tavily' | 'google' | 'dashscope';
-      apiKey?: string;
-      searchEngineId?: string;
-    }>;
-    default: string;
-  };
   private readonly chatCompression: ChatCompressionSettings | undefined;
   private readonly interactive: boolean;
   private readonly trustedFolder: boolean | undefined;
@@ -783,8 +766,6 @@ export class Config {
     this.bugCommand = params.bugCommand;
     this.maxSessionTurns = params.maxSessionTurns ?? -1;
     this.clearContextOnIdle = {
-      thinkingThresholdMinutes:
-        params.clearContextOnIdle?.thinkingThresholdMinutes ?? 5,
       toolResultsThresholdMinutes:
         params.clearContextOnIdle?.toolResultsThresholdMinutes ?? 60,
       toolResultsNumToKeep:
@@ -818,8 +799,7 @@ export class Config {
     this.allowedHttpHookUrls = params.allowedHttpHookUrls ?? [];
     this.onPersistPermissionRuleCallback = params.onPersistPermissionRule;
 
-    // Web search
-    this.webSearch = params.webSearch;
+    // (web search removed)
     this.useRipgrep = params.useRipgrep ?? true;
     this.useBuiltinRipgrep = params.useBuiltinRipgrep ?? true;
     this.shouldUseNodePtyShell =
@@ -1610,9 +1590,11 @@ export class Config {
       return;
     }
     try {
-      // Finalize the current session's metadata before cleanup.
+      // Finalize the current session's metadata before cleanup, then drain
+      // the async write queue so no records are lost on exit.
       try {
         this.chatRecordingService?.finalize();
+        await this.chatRecordingService?.flush();
       } catch {
         // Best-effort — don't block shutdown
       }
@@ -1624,6 +1606,7 @@ export class Config {
       }
 
       this.backgroundTaskRegistry.abortAll();
+      this.backgroundShellRegistry.abortAll();
 
       await this.cleanupArenaRuntime();
     } catch (error) {
@@ -2249,11 +2232,6 @@ export class Config {
     return this.getNoBrowser() || !shouldAttemptBrowserLaunch();
   }
 
-  // Web search provider configuration
-  getWebSearchConfig() {
-    return this.getBareMode() ? undefined : this.webSearch;
-  }
-
   getIdeMode(): boolean {
     return this.ideMode;
   }
@@ -2492,6 +2470,10 @@ export class Config {
     return this.backgroundTaskRegistry;
   }
 
+  getBackgroundShellRegistry(): BackgroundShellRegistry {
+    return this.backgroundShellRegistry;
+  }
+
   /**
    * Whether interactive permission prompts should be auto-denied.
    * True for background agents that have no UI to show prompts.
@@ -2710,13 +2692,6 @@ export class Config {
       const { WebFetchTool } = await import('../tools/web-fetch.js');
       return new WebFetchTool(this);
     });
-    // Conditionally register web search tool if web search provider is configured
-    if (this.getWebSearchConfig()) {
-      await registerLazy(ToolNames.WEB_SEARCH, async () => {
-        const { WebSearchTool } = await import('../tools/web-search/index.js');
-        return new WebSearchTool(this);
-      });
-    }
     if (this.isLspEnabled() && this.getLspClient()) {
       await registerLazy(ToolNames.LSP, async () => {
         const { LspTool } = await import('../tools/lsp.js');
