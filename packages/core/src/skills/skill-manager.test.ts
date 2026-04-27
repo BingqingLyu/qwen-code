@@ -56,14 +56,16 @@ describe('SkillManager', () => {
   let mockConfig: Config;
 
   beforeEach(() => {
+    // Mock os.homedir before makeFakeConfig, since Config constructor
+    // calls Storage.getGlobalQwenDir() which needs os.homedir()
+    vi.mocked(os.homedir).mockReturnValue('/home/user');
+    vi.mocked(os.tmpdir).mockReturnValue('/tmp');
+
     // Create mock Config object using test utility
     mockConfig = makeFakeConfig({});
 
     // Mock the project root method
     vi.spyOn(mockConfig, 'getProjectRoot').mockReturnValue('/test/project');
-
-    // Mock os.homedir
-    vi.mocked(os.homedir).mockReturnValue('/home/user');
 
     // Reset and setup mocks
     vi.clearAllMocks();
@@ -80,6 +82,13 @@ describe('SkillManager', () => {
           name: 'test-skill',
           description: 'A test skill',
           allowedTools: ['read_file', 'write_file'],
+        };
+      }
+      if (yamlString.includes('argument-hint:')) {
+        return {
+          name: 'test-skill',
+          description: 'A test skill',
+          'argument-hint': '[topic]',
         };
       }
       if (yamlString.includes('name: skill1')) {
@@ -237,6 +246,25 @@ You are a helpful assistant with this skill.
       );
 
       expect(config.allowedTools).toEqual(['read_file', 'write_file']);
+    });
+
+    it('should parse argument-hint from frontmatter', () => {
+      const markdownWithArgumentHint = `---
+name: test-skill
+description: A test skill
+argument-hint: "[topic]"
+---
+
+Skill body.
+`;
+
+      const config = manager.parseSkillContent(
+        markdownWithArgumentHint,
+        validSkillConfig.filePath,
+        'project',
+      );
+
+      expect(config.argumentHint).toBe('[topic]');
     });
 
     it('should determine level from file path', () => {

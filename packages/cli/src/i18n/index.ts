@@ -7,8 +7,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { homedir } from 'node:os';
 import { writeStderrLine } from '../utils/stdioHelpers.js';
+import { Storage } from '@qwen-code/qwen-code-core';
 import {
   type SupportedLanguage,
   SUPPORTED_LANGUAGES,
@@ -34,7 +34,7 @@ const getBuiltinLocalesDir = (): string => {
 };
 
 const getUserLocalesDir = (): string =>
-  path.join(homedir(), '.qwen', 'locales');
+  path.join(Storage.getGlobalQwenDir(), 'locales');
 
 /**
  * Get the path to the user's custom locales directory.
@@ -57,15 +57,18 @@ const getLocalePath = (
 export function detectSystemLanguage(): SupportedLanguage {
   const envLang = process.env['QWEN_CODE_LANG'] || process.env['LANG'];
   if (envLang) {
+    // Normalize POSIX locales (e.g. zh_TW.UTF-8 → zh-tw) before matching
+    const normalized = envLang.replace(/_/g, '-').toLowerCase();
     for (const lang of SUPPORTED_LANGUAGES) {
-      if (envLang.startsWith(lang.code)) return lang.code;
+      if (normalized.startsWith(lang.code.toLowerCase())) return lang.code;
     }
   }
 
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+    const normalized = locale.replace(/_/g, '-').toLowerCase();
     for (const lang of SUPPORTED_LANGUAGES) {
-      if (locale.startsWith(lang.code)) return lang.code;
+      if (normalized.startsWith(lang.code.toLowerCase())) return lang.code;
     }
   } catch {
     // Fallback to default

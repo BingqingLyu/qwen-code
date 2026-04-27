@@ -16,7 +16,7 @@ import {
 } from '../config/settings.js';
 import { promisify } from 'node:util';
 import type { Config, SandboxConfig } from '@qwen-code/qwen-code-core';
-import { FatalSandboxError } from '@qwen-code/qwen-code-core';
+import { FatalSandboxError, Storage } from '@qwen-code/qwen-code-core';
 import { randomBytes } from 'node:crypto';
 import { writeStderrLine } from './stdioHelpers.js';
 
@@ -219,6 +219,10 @@ export async function start_sandbox(
       `HOME_DIR=${fs.realpathSync(os.homedir())}`,
       '-D',
       `CACHE_DIR=${fs.realpathSync(execSync(`getconf DARWIN_USER_CACHE_DIR`).toString().trim())}`,
+      '-D',
+      `QWEN_DIR=${path.resolve(Storage.getGlobalQwenDir())}`,
+      '-D',
+      `RUNTIME_DIR=${path.resolve(Storage.getRuntimeBaseDir())}`,
     ];
 
     // Add included directories from the workspace context
@@ -582,10 +586,6 @@ export async function start_sandbox(
   // copy OPENAI_API_KEY and related env vars for Qwen
   if (process.env['OPENAI_API_KEY']) {
     args.push('--env', `OPENAI_API_KEY=${process.env['OPENAI_API_KEY']}`);
-  }
-  // copy TAVILY_API_KEY for web search tool
-  if (process.env['TAVILY_API_KEY']) {
-    args.push('--env', `TAVILY_API_KEY=${process.env['TAVILY_API_KEY']}`);
   }
   if (process.env['OPENAI_BASE_URL']) {
     args.push('--env', `OPENAI_BASE_URL=${process.env['OPENAI_BASE_URL']}`);
