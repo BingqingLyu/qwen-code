@@ -191,8 +191,26 @@ for src, tgt in aggregates: print(f'    {src} o-- {tgt}')    # holder o-- option
 | Method | What it does |
 |--------|-------------|
 | `cs.similar(function, scope, topk=10)` | Find functions similar to a given function within a module scope |
-| `cs.cross_locate(query, topk=10)` | Find semantically related functions, then reveal call-chain connections |
+| `cs.cross_locate(query, topk=10)` | Find semantically related functions, then reveal call-chain connections. Returns `CrossLocateResult` (see below) |
 | `cs.semantic_cross_pollination(query, topk=15)` | Find similar functions across distant subsystems |
+
+**`cross_locate` return value** — a `CrossLocateResult` dataclass (not iterable directly):
+
+```python
+result = cs.cross_locate("memory allocation error handling", topk=10)
+
+# result.seeds: list[dict] — semantically matched functions
+for seed in result.seeds:
+    print(f"  [{seed['score']:.3f}] {seed['name']} ({seed['file_path']})")
+
+# result.connections: list[dict] — call-chain links between seeds
+for conn in result.connections:
+    print(f"  {conn['from']} -> {conn['to']} (distance={conn['distance']}, via={conn['via']})")
+
+# result.clusters: list[list[str]] — connected groups of seed function IDs
+for cluster in result.clusters:
+    print(f"  Cluster: {cluster}")
+```
 
 ### Evolution (requires `--commits` during init)
 
@@ -565,54 +583,183 @@ When `--type pr-review` is specified, only PR-related questions are shown.
 
 ## How to Route Questions
 
-The key decision is: **does the user want an exact structural answer, a fuzzy semantic one, or a bug-to-code mapping?**
+The key decision is: **does the user want an exact structural answer, a fuzzy semantic one, or a bug-to-code mapping?** Every entry below is tagged with the interface layer(s) that support it: **CLI**, **Python API**, **Cypher**, or **MCP**.
 
-| User asks... | Best approach |
-|-------------|---------------|
-| "Who calls `free_irq`?" | Cypher: `MATCH (c:Function)-[:CALLS]->(f:Function {name: 'free_irq'}) RETURN c.name, c.file_path` |
-| "Find functions related to memory allocation" | `cs.vector_only_search("memory allocation")` or `cs.cross_locate("memory allocation")` |
-| "What's the most complex function?" | `cs.hotspots(topk=1)` |
-| "Is there dead code in the networking stack?" | `cs.dead_code()` then filter by file path |
-| "How has `schedule()` changed recently?" | `cs.change_attribution("schedule", "kernel/sched/core.c")` |
-| "Which modules are tightly coupled?" | `cs.module_coupling(topk=20)` |
-| "Generate a full architecture report" | `codegraph analyze` or `generate_report(cs)` |
-| "What's the architectural role of `mm/`?" | `cs.layer_discovery()` then find `mm` entries |
-| "Which functions act as API boundaries?" | `cs.bridge_functions(topk=30)` |
-| "Find commits about fixing race conditions" | `cs.intent_search("fix race condition")` |
-| "What functions are always changed together with `kmalloc`?" | `cs.co_change("kmalloc")` |
-| "Why does this project have so many bugs?" | `cs.analyze_top_bugs("owner", "repo", k=10)` then aggregate hotspots |
-| "Analyze issue #1234 from GitHub" | `cs.analyze_issue("owner", "repo", 1234)` |
-| "What code is related to this bug?" | `cs.analyze_issue(...)` or manual `cross_locate(bug_description)` |
-| "Find the root cause of the crash in issue #42" | `cs.analyze_issue("owner", "repo", 42)` |
-| "Which modules have the most bugs?" | `cs.analyze_top_bugs(...)` then aggregate by file/module |
-| "Index this Java project" | `codegraph init --repo . --lang java` |
-| "What classes extend FileSystem in Hadoop?" | Cypher: `MATCH (c:Class)-[:INHERITS]->(p:Class {name: 'FileSystem'}) RETURN c.name, c.file_path` |
-| "Find all constructors called in this module" | Cypher: `MATCH (f:Function)-[:CALLS]->(init:Function {name: '<init>'}) WHERE f.file_path CONTAINS 'module' RETURN ...` |
-| "Draw a class diagram / show class UML" | Query `COMPOSES`, `AGGREGATES`, `INHERITS` edges and render as Mermaid `classDiagram` |
-| "What does `Llama` own / compose?" | Cypher: `MATCH (c:Class {name:'Llama'})-[:COMPOSES]->(t:Class) RETURN t.name` |
-| "Which class holds a reference to `KVCacheManager`?" | Cypher: `MATCH (c:Class)-[:COMPOSES\|AGGREGATES]->(t:Class {name:'KVCacheManager'}) RETURN c.name` |
-| "Show all optional dependencies of `GPUModelRunner`" | Cypher: `MATCH (c:Class {name:'GPUModelRunner'})-[:AGGREGATES]->(t:Class) RETURN t.name` |
-| "Review all open PRs and generate report" | `codegraph pr-review prepare --db ...` |
-| "Which PRs can be auto-merged?" | Run `pr-review prepare`, check Part 1 of report |
-| "Are there conflicting PRs?" | Run `pr-review prepare`, check Part 3 (connected components) |
-| "What's the risk of PR #42?" | `PRScorer.analyze(entry)` for per-PR scoring |
-| "What's the blast radius of this PR?" | `PRScorer.analyze(entry)` → `result['peak_blast']` and call graph viz |
-| "Which PRs modify the same function?" | `CrossPRAnalyzer.connected_components()` → same-function edge type |
-| "Label PRs with their review category" | `codegraph pr-review label --db ...` |
-| "Post conflict comments on PRs" | `codegraph pr-review label --db ...` (automatic for conflicting PRs) |
-| "Preview labels/comments without applying" | `codegraph pr-review label --db ... --dry-run` |
-| "Explore PR follow-up questions interactively" | `codegraph explore --db .codegraph` (auto-includes PR patterns if `prepare` was run) |
-| "Query a specific PR's conflicts" | `PRReview.conflict_prs_of("42")` — returns list of conflicting PR numbers |
-| "Query a specific PR's changed functions" | Cypher: `MATCH (pr:PR {id: '42'})-[c:CHANGES]->(f:Function) RETURN c.info, f.name, f.file_path` |
-| "Compare two PRs for overlap" | Cypher: `MATCH (pr1:PR {id: '42'})-[c1:CHANGES]->(f:Function)<-[c2:CHANGES]-(pr2:PR {id: '43'}) RETURN f.name, f.file_path` |
-| "Show only architecture questions" | `codegraph explore --db .codegraph --type architecture` |
-| "Show only PR review questions" | `codegraph explore --db .codegraph --type pr-review --role reviewer` |
-| "Show top PR risk questions" | `codegraph explore --db .codegraph --top 15 --role reviewer` |
-| "Full PR review pipeline: analyze, label, explore" | 1) `codegraph pr-review prepare` 2) `codegraph pr-review label` 3) `codegraph explore --db .codegraph` |
+### Function Discovery & Location
 
-For **novel investigations** not covered by pre-built methods, compose raw Cypher queries. See [patterns.md](./patterns.md) for templates. For bug analysis patterns, see [bug-analysis.md](./bug-analysis.md).
+| Question / Need | Best approach | Layer |
+|----------------|---------------|-------|
+| Locate a function by name (file, lines, signature, docstring) | CLI: `codegraph query "where is func_name defined"` **or** Cypher: `MATCH (f:Function {name: 'func_name'}) WHERE f.is_historical = 0 RETURN f.file_path, f.start_line, f.end_line, f.signature, f.doc_comment LIMIT 5` | CLI, Cypher |
+| Check if a function exists in the index | Cypher: `MATCH (f:Function {name: 'func_name'}) WHERE f.is_historical = 0 RETURN count(f)` | Cypher |
+| Find functions by name prefix/pattern | Cypher: `MATCH (f:Function) WHERE f.name STARTS WITH 'prefix_' AND f.is_historical = 0 RETURN f.name, f.file_path LIMIT 30` | Cypher |
+| Find functions containing a name fragment | Cypher: `MATCH (f:Function) WHERE f.name CONTAINS 'alloc' AND f.is_historical = 0 RETURN f.name, f.file_path LIMIT 30` | Cypher |
+| Find functions in a specific module | Cypher: `MATCH (f:Function)<-[:DEFINES_FUNC]-(file:File)-[:BELONGS_TO]->(m:Module {path_prefix: 'module/path'}) WHERE f.is_historical = 0 RETURN f.name, f.file_path LIMIT 50` | Cypher |
+| Find which module a function belongs to | CLI: `codegraph query "which module does func_name belong to"` **or** Cypher: `MATCH (f:Function {name: 'func_name'})<-[:DEFINES_FUNC]-(file:File)-[:BELONGS_TO]->(m:Module) RETURN m.path_prefix LIMIT 1` | CLI, Cypher |
+| "Who calls `free_irq`?" | Cypher: `MATCH (caller:Function)-[:CALLS]->(f:Function {name: 'free_irq'}) WHERE f.is_historical = 0 RETURN caller.name, caller.file_path LIMIT 50` | Cypher |
 
-## Important Filters for Cypher
+### Call Graph Navigation (Callers & Callees)
+
+| Question / Need | Best approach | Layer |
+|----------------|---------------|-------|
+| Get **direct callers** of a function | CLI: `codegraph query "who calls func_name"` **or** Cypher: `MATCH (caller:Function)-[:CALLS]->(f:Function {name: 'func_name'}) WHERE f.is_historical = 0 RETURN caller.name, caller.file_path LIMIT 50` | CLI, Cypher |
+| Get **transitive callers** (up to N hops) | `cs.impact(func_name, change_desc, max_hops=N)` **or** Cypher: `MATCH (caller:Function)-[:CALLS*1..N]->(f:Function {name: 'func_name'}) WHERE f.is_historical = 0 RETURN DISTINCT caller.name, caller.file_path LIMIT 50` | Python API, Cypher |
+| Get **direct callees** of a function | CLI: `codegraph query "what does func_name call"` **or** Cypher: `MATCH (f:Function {name: 'func_name'})-[:CALLS]->(callee:Function) WHERE f.is_historical = 0 RETURN callee.name, callee.file_path LIMIT 50` | CLI, Cypher |
+| Get **transitive callees** (call tree) | Cypher: `MATCH (f:Function {name: 'func_name'})-[:CALLS*1..3]->(callee:Function) WHERE f.is_historical = 0 RETURN DISTINCT callee.name, callee.file_path LIMIT 50` | Cypher |
+| Get impact scope of modifying a function | MCP: `codegraph_impact(function_name, change_description)` **or** `cs.impact(func_name, "refactor", max_hops=3)` | MCP, Python API |
+
+> **Note:** `cs.impact()` is caller-only and ranks by semantic relevance. For pure structural caller/callee queries without ranking, use the Cypher patterns above.
+
+### Class & Object Navigation
+
+| Question / Need | Best approach | Layer |
+|----------------|---------------|-------|
+| Find all methods in a class | Cypher: `MATCH (c:Class {name: 'ClassName'})-[:HAS_METHOD]->(f:Function) RETURN f.name, f.signature, f.file_path, f.start_line, f.end_line` | Cypher |
+| Find which class a method belongs to | Cypher: `MATCH (c:Class)-[:HAS_METHOD]->(f:Function {name: 'method_name'}) RETURN c.name, c.file_path LIMIT 5` | Cypher |
+| Get class inheritance chain | `cs.class_hierarchy(class_name)` **or** Cypher: `MATCH (c:Class {name: 'ClassName'})-[:INHERITS*1..10]->(base:Class) RETURN c.name, base.name` | Python API, Cypher |
+| Find all subclasses of a class | Cypher: `MATCH (c:Class)-[:INHERITS]->(p:Class {name: 'ParentClass'}) RETURN c.name, c.file_path` | Cypher |
+| Find composition/aggregation neighbors | Cypher: `MATCH (c:Class {name: 'ClassName'})-[r:COMPOSES|AGGREGATES]->(t:Class) RETURN type(r), t.name` | Cypher |
+| "What classes extend FileSystem in Hadoop?" | Cypher: `MATCH (c:Class)-[:INHERITS]->(p:Class {name: 'FileSystem'}) RETURN c.name, c.file_path` | Cypher |
+| "Find all constructors called in this module" | Cypher: `MATCH (f:Function)-[:CALLS]->(init:Function {name: '<init>'}) WHERE f.file_path CONTAINS 'module' RETURN init.class_name, f.name, f.file_path LIMIT 20` | Cypher |
+| "Draw a class diagram / show class UML" | Query `COMPOSES`, `AGGREGATES`, `INHERITS` edges and render as Mermaid `classDiagram` (see Core Python API section) | Cypher |
+| "What does `Llama` own / compose?" | Cypher: `MATCH (c:Class {name:'Llama'})-[:COMPOSES]->(t:Class) RETURN t.name` | Cypher |
+| "Which class holds a reference to `KVCacheManager`?" | Cypher: `MATCH (c:Class)-[:COMPOSES|AGGREGATES]->(t:Class {name:'KVCacheManager'}) RETURN c.name` | Cypher |
+| "Show all optional dependencies of `GPUModelRunner`" | Cypher: `MATCH (c:Class {name:'GPUModelRunner'})-[:AGGREGATES]->(t:Class) RETURN t.name` | Cypher |
+
+### Semantic & Similarity Search
+
+| Question / Need | Best approach | Layer |
+|----------------|---------------|-------|
+| Find functions semantically similar to a given function | `cs.similar(func_name, scope, topk=10)` | Python API |
+| "Find functions related to memory allocation" | MCP: `codegraph_vector_search("memory allocation")` **or** `cs.vector_only_search("memory allocation", topk=10)` **or** `cs.cross_locate("memory allocation", topk=10)` | MCP, Python API |
+| Find functions similar across distant subsystems | MCP: `codegraph_cross_pollination("memory allocation")` **or** `cs.semantic_cross_pollination("memory allocation", topk=15)` | MCP, Python API |
+
+### Code Quality & Risk Signals
+
+| Question / Need | Best approach | Layer |
+|----------------|---------------|-------|
+| "What's the most complex / risky function?" | MCP: `codegraph_hotspots(topk=10)` **or** `cs.hotspots(topk=10)` | MCP, Python API |
+| "Is there dead code in the networking stack?" | MCP: `codegraph_dead_code()` **or** `cs.dead_code()` then filter by file path | MCP, Python API |
+| Find circular dependencies | `cs.circular_deps()` | Python API |
+| "Which modules are tightly coupled?" | MCP: `codegraph_coupling(topk=10)` **or** `cs.module_coupling(topk=10)` | MCP, Python API |
+| "Which functions act as API boundaries?" | MCP: `codegraph_bridges(topk=30)` **or** `cs.bridge_functions(topk=30)` | MCP, Python API |
+
+### Evolution & Change History
+
+| Question / Need | Best approach | Layer |
+|----------------|---------------|-------|
+| "How has `schedule()` changed recently?" | MCP: `codegraph_history("schedule", "kernel/sched/core.c")` **or** `cs.change_attribution("schedule", "kernel/sched/core.c", limit=20)` | MCP, Python API |
+| "What functions are always changed together with `kmalloc`?" | MCP: `codegraph_cochange("kmalloc")` **or** `cs.co_change("kmalloc", min_commits=2, topk=10)` | MCP, Python API |
+| "Find commits about fixing race conditions" | MCP: `codegraph_intent("fix race condition")` **or** `cs.intent_search("fix race condition", topk=10)` | MCP, Python API |
+| Score commits by how many modules they touch | MCP: `codegraph_commit_modularity(topk=20)` **or** `cs.commit_modularity(topk=20)` | MCP, Python API |
+| Map module modification density | MCP: `codegraph_hot_cold(topk=30)` **or** `cs.hot_cold_map(topk=30)` | MCP, Python API |
+| Prove Stable Dependencies Principle | MCP: `codegraph_stability(topk=50)` **or** `cs.stability_analysis(topk=50)` | MCP, Python API |
+
+### Bug & Issue Analysis
+
+| Question / Need | Best approach | Layer |
+|----------------|---------------|-------|
+| "Analyze issue #1234 from GitHub" | `cs.analyze_issue("owner", "repo", 1234)` **or** CLI: `codegraph analyze-bug owner repo 1234 --db .codegraph` | Python API, CLI |
+| "Find the root cause of the crash in issue #42" | `cs.analyze_issue("owner", "repo", 42)` | Python API |
+| "What code is related to this bug?" | `cs.analyze_issue(...)` or manual `cs.cross_locate(bug_description)` | Python API |
+| "Why does this project have so many bugs?" | `cs.analyze_top_bugs("owner", "repo", k=10)` then aggregate hotspots | Python API |
+| "Which modules have the most bugs?" | `cs.analyze_top_bugs(...)` then aggregate by file/module | Python API |
+| Fetch and parse a single issue (no graph needed) | CLI: `codegraph fetch-issue owner repo 1234` | CLI |
+| Fetch top-k bug issues (no graph needed) | CLI: `codegraph fetch-bugs owner repo --top 10 --label bug` | CLI |
+| Batch analyze top bugs against the graph | CLI: `codegraph analyze-bugs owner repo --db .codegraph --top 10` | CLI |
+
+### PR Review & Analysis
+
+| Question / Need | Best approach | Layer |
+|----------------|---------------|-------|
+| "Review all open PRs and generate report" | CLI: `codegraph pr-review prepare --db .codegraph` | CLI |
+| "Which PRs can be auto-merged?" | `PRReview.auto_merge_candidates()` (after `prepare`) | Python API |
+| "Are there conflicting PRs?" | `PRReview.conflicting_groups()` or `CrossPRAnalyzer.connected_components()` | Python API |
+| "What's the risk of PR #42?" | `PRReview.risk("42")` | Python API |
+| "What's the blast radius of this PR?" | `PRScorer.analyze(entry)` → `result.peak_blast` | Python API |
+| "Which PRs modify the same function?" | `CrossPRAnalyzer.connected_components()` | Python API |
+| "Label PRs with their review category" | CLI: `codegraph pr-review label --db .codegraph` | CLI |
+| "Preview labels/comments without applying" | CLI: `codegraph pr-review label --db .codegraph --dry-run` | CLI |
+| "Query a specific PR's conflicts" | `PRReview.conflict_prs_of("42")` | Python API |
+| "Query a specific PR's changed functions" | Cypher: `MATCH (pr:PR {id: '42'})-[c:CHANGES]->(f:Function) RETURN c.info, f.name, f.file_path` | Cypher |
+| "Compare two PRs for overlap" | Cypher: `MATCH (pr1:PR {id: '42'})-[c1:CHANGES]->(f:Function)<-[c2:CHANGES]-(pr2:PR {id: '43'}) RETURN f.name, f.file_path` | Cypher |
+| "Explore PR follow-up questions interactively" | CLI: `codegraph explore --db .codegraph` (auto-includes PR patterns if `prepare` was run) | CLI |
+| "Show only architecture questions" | CLI: `codegraph explore --db .codegraph --type architecture` | CLI |
+| "Show only PR review questions" | CLI: `codegraph explore --db .codegraph --type pr-review --role reviewer` | CLI |
+| "Show top PR risk questions" | CLI: `codegraph explore --db .codegraph --top 15 --role reviewer` | CLI |
+| "Full PR review pipeline: analyze, label, explore" | 1) `codegraph pr-review prepare` 2) `codegraph pr-review label` 3) `codegraph explore --db .codegraph` | CLI |
+
+### Architecture & Reports
+
+| Question / Need | Best approach | Layer |
+|----------------|---------------|-------|
+| "Generate a full architecture report" | CLI: `codegraph analyze --output report.md` **or** `generate_report(cs)` | CLI, Python API |
+| Print human-readable index summary | `cs.summary()` **or** MCP: `codegraph_stats()` **or** CLI: `codegraph open` | Python API, MCP, CLI |
+| "What's the architectural role of `mm/`?" | MCP: `codegraph_layers(topk=30)` **or** `cs.layer_discovery(topk=30)` then find `mm` entries | MCP, Python API |
+| Ask a natural-language question against the index | CLI: `codegraph query "who calls free_irq?"` **or** MCP: `codegraph_query("who calls free_irq?")` | CLI, MCP |
+
+### Indexing & Setup
+
+| Question / Need | Best approach | Layer |
+|----------------|---------------|-------|
+| "Index this Java project" | CLI: `codegraph init --repo . --lang java --commits 500` | CLI |
+| Create index for current repo | CLI: `codegraph init --repo . --lang auto --commits 500` | CLI |
+| Add git history to existing index | CLI: `codegraph ingest --repo . --db .codegraph --commits 500` | CLI |
+| Backfill function-level MODIFIES edges | CLI: `codegraph ingest --repo . --db .codegraph --backfill-limit 200` | CLI |
+| Check index health and counts | CLI: `codegraph status --db .codegraph` | CLI |
+| Open index and print summary | CLI: `codegraph open --db .codegraph` | CLI |
+| Start MCP server | CLI: `codegraph server --db .codegraph` | CLI |
+
+For **novel investigations** not covered by pre-built methods, compose raw Cypher queries. See [patterns.md](./patterns.md) for templates. For bug analysis patterns, see [bug-analysis.md](./bug-analysis.md). For PR analysis patterns, see [pr-analysis.md](./pr-analysis.md).
+
+### Cypher Cheat-Sheet
+
+These patterns cover 90% of structural navigation needs:
+
+```cypher
+-- 1. Function location + metadata
+MATCH (f:Function {name: 'func_name'})
+WHERE f.is_historical = 0
+RETURN f.file_path, f.start_line, f.end_line, f.signature, f.doc_comment
+LIMIT 5
+
+-- 2. Direct callers
+MATCH (caller:Function)-[:CALLS]->(f:Function {name: 'func_name'})
+WHERE f.is_historical = 0
+RETURN caller.name, caller.file_path
+LIMIT 50
+
+-- 3. Direct callees
+MATCH (f:Function {name: 'func_name'})-[:CALLS]->(callee:Function)
+WHERE f.is_historical = 0
+RETURN callee.name, callee.file_path
+LIMIT 50
+
+-- 4. Transitive callers (2 hops)
+MATCH (caller:Function)-[:CALLS*1..2]->(f:Function {name: 'func_name'})
+WHERE f.is_historical = 0
+RETURN DISTINCT caller.name, caller.file_path
+LIMIT 50
+
+-- 5. Module membership
+MATCH (f:Function {name: 'func_name'})<-[:DEFINES_FUNC]-(file:File)-[:BELONGS_TO]->(m:Module)
+RETURN m.path_prefix
+LIMIT 1
+
+-- 6. Class methods
+MATCH (c:Class {name: 'ClassName'})-[:HAS_METHOD]->(f:Function)
+RETURN f.name, f.signature, f.file_path, f.start_line
+
+-- 7. Fan-in / fan-out for a specific function
+MATCH (caller:Function)-[:CALLS]->(f:Function {name: 'func_name'})-[:CALLS]->(callee:Function)
+WHERE f.is_historical = 0
+RETURN count(DISTINCT caller) AS fan_in, count(DISTINCT callee) AS fan_out
+
+-- 8. Find functions by semantic + structural combo
+-- Step A: vector search for seed functions
+-- Step B: graph query to find which seeds call each other
+```
+
+### Important Filters for Cypher
 
 When writing Cypher queries, these filters prevent misleading results:
 
@@ -620,6 +767,18 @@ When writing Cypher queries, these filters prevent misleading results:
 - **`f.is_external = 0`** (on File nodes) — exclude system headers/library files
 - **`c.version_tag = 'bf'`** — only backfilled commits have `MODIFIES` edges; non-backfilled commits only have `TOUCHES` (file-level) edges
 - **Always use `LIMIT`** — large codebases can return hundreds of thousands of rows
+- Use **`file_path` disambiguation** when function names are overloaded across files
+
+### When to Use Python API vs. Raw Cypher vs. MCP
+
+| Situation | Use |
+|-----------|-----|
+| Pure structural navigation (callers, callees, module, class) | **Cypher** — fastest, most precise |
+| Semantic ranking needed (impact analysis, similarity) | **Python API** (`cs.impact()`, `cs.similar()`, `cs.cross_locate()`) |
+| Combining vector + graph (cross-pollination, intent search) | **Python API** |
+| One-off quick checks in a script | **Cypher** via `cs.conn.execute()` |
+| External agent / LLM tool calling | **MCP tools** (`codegraph_query`, `codegraph_impact`, `codegraph_cypher`, `codegraph_hotspots`, etc.) |
+| Shell automation, CI/CD, or human operators | **CLI** (`codegraph analyze`, `codegraph pr-review`, `codegraph explore`) |
 
 ## Checking Data Availability
 
