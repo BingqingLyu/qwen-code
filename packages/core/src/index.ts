@@ -132,6 +132,7 @@ export type { ToolSearchTool, ToolSearchParams } from './tools/tool-search.js';
 // ============================================================================
 
 export * from './services/chatRecordingService.js';
+export type { NotificationRecordPayload } from './services/chatRecordingService.js';
 export * from './services/cronScheduler.js';
 export * from './services/fileDiscoveryService.js';
 export * from './services/fileReadCache.js';
@@ -140,6 +141,7 @@ export * from './services/gitService.js';
 export * from './services/gitWorktreeService.js';
 export * from './services/sessionRecap.js';
 export * from './services/sessionService.js';
+export { SESSION_TITLE_MAX_LENGTH } from './services/sessionService.js';
 export * from './services/sessionTitle.js';
 export {
   stripTerminalControlSequences,
