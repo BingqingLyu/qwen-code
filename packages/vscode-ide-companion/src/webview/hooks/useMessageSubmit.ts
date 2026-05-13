@@ -13,6 +13,7 @@ import { ZERO_WIDTH_SPACE, stripZeroWidthSpaces } from '@qwen-code/webui';
 interface UseMessageSubmitProps {
   vscode: VSCodeAPI;
   inputText: string;
+  inputTextRef?: React.RefObject<string>;
   setInputText: (text: string) => void;
   attachedImages?: ImageAttachment[];
   clearImages?: () => void;
@@ -64,6 +65,7 @@ export const shouldSendMessage = ({
 export const useMessageSubmit = ({
   vscode,
   inputText,
+  inputTextRef,
   setInputText,
   attachedImages = [],
   clearImages,
@@ -80,8 +82,8 @@ export const useMessageSubmit = ({
     (e: React.FormEvent | React.KeyboardEvent, explicitText?: string) => {
       e.preventDefault();
 
-      // Use explicit text if provided (e.g., from prompt suggestion Enter accept)
-      const textToSend = explicitText ?? inputText;
+      // Prefer explicit text, then ref (always current), then state (may lag via useTransition).
+      const textToSend = explicitText ?? inputTextRef?.current ?? inputText;
 
       if (
         !shouldSendMessage({
@@ -216,6 +218,7 @@ export const useMessageSubmit = ({
     },
     [
       inputText,
+      inputTextRef,
       attachedImages,
       clearImages,
       isStreaming,
